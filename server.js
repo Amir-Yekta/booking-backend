@@ -4,9 +4,14 @@ const { google } = require('googleapis');
 const bodyParser = require('body-parser');
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;   // ⬅ use dynamic port
 
 app.use(bodyParser.json());
+
+// Home route
+app.get('/', (_req, res) => {
+  res.send('Booking API is live!  Endpoints: /api/availability  •  /api/book');
+});
 
 // --- GOOGLE AUTH SETUP ---
 const oauth2Client = new google.auth.OAuth2(
