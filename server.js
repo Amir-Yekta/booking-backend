@@ -1,19 +1,24 @@
 require('dotenv').config();
-const express = require('express');
-const { google } = require('googleapis');
+const express   = require('express');
 const bodyParser = require('body-parser');
+const cors       = require('cors');
+const { google } = require('googleapis');
 
-const app = express();
-const PORT = process.env.PORT || 5000;   // ⬅ use dynamic port
+const app  = express();
+const PORT = process.env.PORT || 5000;      // use Render‑provided port in prod
+
+// ─── MIDDLEWARE ──────────────────────────────────────────────
+app.use(cors());              // allow all origins while testing
+// app.use(cors({ origin: 'https://your‑wp‑site.com' })); // ← lock down later
 
 app.use(bodyParser.json());
 
-// Home route
+// ─── ROOT ROUTE ──────────────────────────────────────────────
 app.get('/', (_req, res) => {
   res.send('Booking API is live!  Endpoints: /api/availability  •  /api/book');
 });
 
-// --- GOOGLE AUTH SETUP ---
+// ─── GOOGLE AUTH SETUP ───────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
   process.env.CLIENT_ID,
   process.env.CLIENT_SECRET,
@@ -23,27 +28,26 @@ const oauth2Client = new google.auth.OAuth2(
 oauth2Client.setCredentials({ refresh_token: process.env.REFRESH_TOKEN });
 const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-// --- ROUTE: CHECK AVAILABILITY ---
-app.get('/api/availability', async (req, res) => {
+// ─── ROUTE: CHECK AVAILABILITY (next 7 days) ─────────────────
+app.get('/api/availability', async (_req, res) => {
   try {
     const { data } = await calendar.freebusy.query({
       requestBody: {
         timeMin: new Date().toISOString(),
-        timeMax: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // next 7 days
+        timeMax: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         timeZone: 'America/Vancouver',
         items: [{ id: 'primary' }]
-      },
+      }
     });
 
-    const busySlots = data.calendars.primary.busy;
-    res.json({ busy: busySlots });
+    res.json({ busy: data.calendars.primary.busy });
   } catch (err) {
-    console.error(err);
+    console.error('Availability error:', err);
     res.status(500).send('Failed to fetch availability');
   }
 });
 
-// --- ROUTE: BOOK APPOINTMENT ---
+// ─── ROUTE: BOOK APPOINTMENT ─────────────────────────────────
 app.post('/api/book', async (req, res) => {
   try {
     const { summary, description, startTime, endTime } = req.body;
@@ -53,25 +57,19 @@ app.post('/api/book', async (req, res) => {
       requestBody: {
         summary,
         description,
-        start: {
-          dateTime: startTime,
-          timeZone: 'America/Vancouver',
-        },
-        end: {
-          dateTime: endTime,
-          timeZone: 'America/Vancouver',
-        },
-      },
+        start: { dateTime: startTime, timeZone: 'America/Vancouver' },
+        end:   { dateTime: endTime,   timeZone: 'America/Vancouver' }
+      }
     });
 
-    res.status(200).json({ success: true, event: response.data });
+    res.json({ success: true, event: response.data });
   } catch (err) {
-    console.error(err);
+    console.error('Booking error:', err);
     res.status(500).send('Failed to book event');
   }
 });
 
-// --- START SERVER ---
+// ─── START SERVER ────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
